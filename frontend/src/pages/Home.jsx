@@ -32,6 +32,7 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
+      {/* this is hero section */}
       <section className="bg-grid relative overflow-hidden border-b border-ink-700">
         <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="animate-fade-up mx-auto max-w-3xl text-center">
