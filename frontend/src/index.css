@@ -1,0 +1,152 @@
+@import 'tailwindcss';
+
+/* Design tokens. Tailwind v4 turns each of these into utilities,
+   e.g. --color-ink-900 becomes bg-ink-900 / text-ink-900 / border-ink-900. */
+@theme {
+  /* Surfaces, lightest first: ink-950 is the page, ink-900 is a card,
+     850/800 are subtle fills, 700/600 are borders. Soft grey rather than
+     white, so the page is easier on the eyes in a bright hall. */
+  --color-ink-950: #e8ebed;
+  --color-ink-900: #f6f7f8;
+  --color-ink-850: #e3e6e9;
+  --color-ink-800: #dadee2;
+  --color-ink-700: #d0d5da;
+  --color-ink-600: #b7bfc6;
+
+  /* Text, darkest first. mist-500 is the faintest that still holds up
+     on a projector. */
+  --color-mist-100: #0f1317;
+  --color-mist-200: #2b3238;
+  --color-mist-300: #434b53;
+  --color-mist-400: #525a62;
+  --color-mist-500: #676f77;
+
+  /* Three muted accents only: a soft sage for anything interactive,
+     warm sand and clay for the few places that need to differ.
+     200 is the darkest (text on a tint), 500 the lightest (fills, borders). */
+  --color-brand-200: #2f5b52;
+  --color-brand-300: #3d6f64;
+  --color-brand-400: #4e8578;
+  --color-brand-500: #6aa294;
+  --color-brand-600: #86b5a9;
+
+  --color-sand-200: #6b5a36;
+  --color-sand-300: #7a6840;
+  --color-sand-400: #9a8557;
+  --color-sand-500: #b9a173;
+
+  --color-clay-200: #7a4639;
+  --color-clay-300: #8d5748;
+  --color-clay-400: #a87264;
+  --color-clay-500: #c08d7e;
+
+  /* A warm orange, used sparingly: section numbers, eyebrows, exam tips. */
+  --color-flame-200: #7d3c14;
+  --color-flame-300: #9c4f1c;
+  --color-flame-400: #b8642a;
+  --color-flame-500: #d9873f;
+
+  /* Code blocks stay dark on the light page, so they need their own
+     scale that does not flip with the theme. */
+  --color-code-bg: #16191d;
+  --color-code-head: #1e2328;
+  --color-code-border: #2b3238;
+  --color-code-text: #d7dce1;
+  --color-code-muted: #868f99;
+  --color-code-sage: #9fc7bd;
+  --color-code-sage-soft: #c6ded8;
+  --color-code-sand: #d4bd97;
+  --color-code-clay: #cd9f92;
+  --color-code-flame: #e0a06a;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --animate-fade-up: fade-up 0.5s ease-out both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+body {
+  @apply bg-ink-950 text-mist-200 font-sans antialiased;
+}
+
+/* Faint grid so the hero does not read as a flat white slab. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(15, 19, 23, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 19, 23, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+::selection {
+  background-color: rgba(106, 162, 148, 0.25);
+}
+
+/* Slim scrollbars for the sidebar and code blocks. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b7bfc6 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #b7bfc6;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

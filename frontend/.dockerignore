@@ -1,0 +1,11 @@
+# Built on this machine, for this machine. The image installs its own.
+node_modules
+
+# The image runs its own build; a local dist/ would just be copied and thrown away.
+dist
+
+# Never bake local environment files into an image.
+.env
+.env.local
+
+*.log

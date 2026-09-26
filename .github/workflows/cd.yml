@@ -1,0 +1,143 @@
+name: CD
+
+# Manual only, deliberately. Nothing here runs until you press "Run workflow" in
+# the Actions tab, so this pipeline cannot turn the repository red before the
+# secrets exist.
+#
+# That button is also the difference between the two CDs:
+#   pressing it yourself           -> Continuous Delivery  (a human releases)
+#   uncommenting the push trigger  -> Continuous Deployment (every merge ships)
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+
+# ---------------------------------------------------------------------------
+# Secrets to add later: GitHub -> Settings -> Secrets and variables -> Actions
+#
+#   AWS_ACCESS_KEY_ID      access key of a scoped IAM user
+#   AWS_SECRET_ACCESS_KEY  its secret access key
+#   EC2_HOST               public IPv4 of the instance, e.g. 13.229.x.x
+#   EC2_SSH_KEY            full contents of the .pem private key
+#
+# Assumed already set up on the instance (runbook sections 28, 29 and 33):
+#   - Docker installed, and the ubuntu user added to the docker group
+#   - AWS CLI installed
+#   - an IAM role attached that can read from ECR
+# ---------------------------------------------------------------------------
+env:
+  AWS_REGION: ap-southeast-1
+  BACKEND_REPOSITORY: se-kuppi-backend
+  FRONTEND_REPOSITORY: se-kuppi-frontend
+  EC2_USER: ubuntu
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # id-token is only needed for the OIDC option below; harmless otherwise.
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Turns the secrets into credentials the later AWS steps can use.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Preferred in real projects: no long-lived keys at all. Delete the two
+          # lines above, delete both secrets, and use a role instead:
+          # role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-actions-se-kuppi
+
+      # Logs docker in to ECR and outputs the registry host,
+      # ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Two tags per image: the commit SHA so a running container can always be
+      # traced back to its code, and latest for convenience.
+      - name: Build and push backend image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$BACKEND_REPOSITORY:latest" \
+            ./backend
+          docker push "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$BACKEND_REPOSITORY:latest"
+
+      # The API URL is baked into the bundle at build time, so it has to be the
+      # address the BROWSER will use - the public EC2 address, never localhost.
+      - name: Build and push frontend image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          API_URL: http://${{ secrets.EC2_HOST }}:5000
+        run: |
+          docker build \
+            --build-arg "VITE_API_URL=$API_URL" \
+            -t "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$FRONTEND_REPOSITORY:latest" \
+            ./frontend
+          docker push "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$FRONTEND_REPOSITORY:latest"
+
+      # Pull the new images on the instance and restart the two containers.
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: REGISTRY,IMAGE_TAG,AWS_REGION,BACKEND_REPOSITORY,FRONTEND_REPOSITORY
+          script: |
+            set -e
+
+            # The instance authenticates with its own IAM role, so no keys here.
+            aws ecr get-login-password --region "$AWS_REGION" \
+              | docker login --username AWS --password-stdin "$REGISTRY"
+
+            docker pull "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+            docker pull "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+
+            # Replace whatever is running. Containers are disposable; the image
+            # tag is the only thing that identifies a version.
+            docker rm -f se-kuppi-backend se-kuppi-frontend || true
+
+            docker run -d --name se-kuppi-backend --restart unless-stopped \
+              -p 5000:5000 \
+              "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+
+            # 5173 on the host, 80 in the container: nginx serves the built site
+            # on port 80, and 5173 is the port the security group opens.
+            docker run -d --name se-kuppi-frontend --restart unless-stopped \
+              -p 5173:80 \
+              "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+
+            docker image prune -f
+
+      # Confirm the deployed app answers, from outside the instance.
+      - name: Verify the deployment
+        run: curl -fsS --retry 5 --retry-delay 3 "http://${{ secrets.EC2_HOST }}:5000/api/health"
+
+      - name: Summarise the run
+        run: |
+          {
+            echo "### Deployed ${GITHUB_SHA::7}"
+            echo ""
+            echo "- Frontend: http://${{ secrets.EC2_HOST }}:5173"
+            echo "- API health: http://${{ secrets.EC2_HOST }}:5000/api/health"
+          } >> "$GITHUB_STEP_SUMMARY"

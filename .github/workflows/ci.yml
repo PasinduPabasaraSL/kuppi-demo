@@ -1,0 +1,64 @@
+name: CI
+
+# When this pipeline runs: every push to main, and every pull request aimed at main.
+# The pull_request trigger is what makes a red check appear on the PR before merging.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    # A fresh Ubuntu virtual machine, provided by GitHub, thrown away afterwards.
+    runs-on: ubuntu-latest
+
+    steps:
+      # The runner starts empty, so the first job is always to fetch the code.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Node, and reuse the npm download cache from previous runs.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # ci (not install) installs exactly the versions in package-lock.json,
+      # so the pipeline builds what you tested, not a newer patch release.
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # The closest thing we have to a test: start the API and ask it if it is
+      # healthy. -f makes curl exit non-zero on an error status, which fails the job.
+      - name: Smoke test the API
+        run: |
+          node src/server.js &
+          sleep 2
+          curl -fsS http://localhost:5000/api/health
+          curl -fsS http://localhost:5000/api/todos
+        working-directory: backend
+
+      # Proves the frontend still compiles from a clean checkout.
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      # Proves both Dockerfiles still build. Tagged with the commit SHA so an
+      # image can always be traced back to the exact code that produced it.
+      - name: Build backend image
+        run: docker build -t se-kuppi-backend:${{ github.sha }} ./backend
+
+      - name: Build frontend image
+        run: docker build -t se-kuppi-frontend:${{ github.sha }} ./frontend

@@ -1,0 +1,8 @@
+# Never copy the host's node_modules into the image: it was built for this
+# machine, and the image installs its own with npm ci.
+node_modules
+
+# Nothing secret or noisy either.
+.env
+*.log
+npm-debug.log*

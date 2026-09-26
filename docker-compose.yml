@@ -1,0 +1,34 @@
+# One command to build and start the whole application.
+# Compose creates a network for these services automatically, so the backend is
+# reachable as http://backend:5000 from inside any other container here.
+#
+#   docker compose up --build     start both, building first
+#   docker compose ps             what is running
+#   docker compose logs -f        follow both logs together
+#   docker compose down           stop and remove everything
+
+services:
+  backend:
+    build: ./backend
+    container_name: kuppi-backend
+    ports:
+      # host:container - this is what makes localhost:5000 work on your machine
+      - "5000:5000"
+    environment:
+      PORT: 5000
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Careful: the BROWSER makes this request, not the frontend container.
+        # So it must be a URL your machine can reach. http://backend:5000 would
+        # only resolve inside the Compose network, and the browser is not in it.
+        VITE_API_URL: http://localhost:5000
+    container_name: kuppi-frontend
+    ports:
+      - "8080:80"
+    # Only controls start order, not readiness: Compose moves on as soon as the
+    # backend container starts, without waiting for Express to be listening.
+    depends_on:
+      - backend
